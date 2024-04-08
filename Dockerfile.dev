@@ -1,0 +1,25 @@
+FROM python:3.9-slim-buster
+ARG TZ
+ENV TZ=$TZ
+
+COPY . /src
+WORKDIR /src/python/src
+
+# hadolint ignore=DL3013
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y entr tzdata --no-install-recommends && \
+    SETUPTOOLS_SCM_PRETEND_VERSION=dev pip install --no-cache-dir -e .. && \
+    groupadd -r etos && useradd -r -m -s /bin/false -g etos etos
+
+USER etos
+EXPOSE 8080
+
+ENTRYPOINT ["uvicorn", "etos_api.main:APP", "--host=0.0.0.0", "--port=8080", "--reload"]
+
+# DOCKER_CONTEXT is used by ETOS Library to determine whether or not the tool is running in Kubernetes
+ENV DOCKER_CONTEXT="ETOS API"
+
+LABEL org.opencontainers.image.source=https://github.com/eiffel-community/etos-api
+LABEL org.opencontainers.image.authors=etos-maintainers@googlegroups.com
+LABEL org.opencontainers.image.licenses=Apache-2.0
