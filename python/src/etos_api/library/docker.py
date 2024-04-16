@@ -79,9 +79,9 @@ class Docker:
         :param response: HTTP response to get headers from.
         :return: Response JSON from authorization request.
         """
-        header = response.headers.get("www-authenticate")
-        header = header.replace("Bearer ", "")
-        parts = header.split(",")
+        www_auth_header = response.headers.get("www-authenticate")
+        challenge = www_auth_header.replace("Bearer ", "")
+        parts = challenge.split(",")
 
         url = None
         query = {}
@@ -91,6 +91,9 @@ class Docker:
                 url = value.strip('"')
             else:
                 query[key] = value.strip('"')
+
+        if not url:
+            raise ValueError(f"No realm found in www-authenticate header: {www_auth_header}")
 
         async with session.get(url, params=query) as response:
             response.raise_for_status()
@@ -172,6 +175,9 @@ class Docker:
                 digest = response.headers.get("Docker-Content-Digest")
             except aiohttp.ClientResponseError as exception:
                 self.logger.error("Error getting container image %r", exception)
+                digest = None
+            except ValueError as exception:
+                self.logger.error(f"Failed to authenticate with container registry: {exception}")
                 digest = None
         self.logger.info("Returning digest %r from %r", digest, manifest_url)
         return digest
