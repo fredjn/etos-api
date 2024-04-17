@@ -177,7 +177,7 @@ class Docker:
                 self.logger.error("Error getting container image %r", exception)
                 digest = None
             except ValueError as exception:
-                self.logger.error(f"Failed to authenticate with container registry: {exception}")
+                self.logger.error("Failed to authenticate with container registry: %r", exception)
                 digest = None
         self.logger.info("Returning digest %r from %r", digest, manifest_url)
         return digest
