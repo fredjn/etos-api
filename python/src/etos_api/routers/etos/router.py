@@ -23,7 +23,6 @@ from etos_lib import ETOS
 from fastapi import APIRouter, HTTPException
 from kubernetes import client
 from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
 
 from etos_api.library.environment import Configuration, configure_testrun
 from etos_api.library.utilities import sync_to_async
@@ -39,19 +38,19 @@ LOGGER = logging.getLogger(__name__)
 logging.getLogger("pika").setLevel(logging.WARNING)
 
 
-async def validate_suite(test_suite_url: str, span: "Span") -> None:
+async def validate_suite(test_suite_url: str) -> None:
     """Validate the ETOS test suite through the SuiteValidator.
 
     :param test_suite_url: The URL to the test suite to validate.
     """
+    span = trace.get_current_span()
+
     try:
         await SuiteValidator().validate(test_suite_url)
     except AssertionError as exception:
         LOGGER.error("Test suite validation failed!")
         LOGGER.error(exception)
         span.add_event("Test suite validation failed")
-        span.set_status(Status(StatusCode.ERROR, "Test suite validation failed"))
-        span.record_exception(exception)
         raise HTTPException(
             status_code=400, detail=f"Test suite validation failed. {exception}"
         ) from exception
@@ -69,7 +68,7 @@ async def _start(etos: StartEtosRequest, span: "Span") -> dict:
     span.set_attribute("etos.id", tercc.meta.event_id)
 
     LOGGER.info("Validating test suite.")
-    await validate_suite(etos.test_suite_url, span)
+    await validate_suite(etos.test_suite_url)
     LOGGER.info("Test suite validated.")
 
     etos_library = ETOS("ETOS API", os.getenv("HOSTNAME"), "ETOS API")
