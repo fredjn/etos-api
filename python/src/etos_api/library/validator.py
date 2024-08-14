@@ -186,7 +186,7 @@ class SuiteValidator:
         downloaded_suite = await self._download_suite(test_suite_url)
         assert (
             len(downloaded_suite) > 0
-        ), "Test suite definition unsuccessful - Reason: Empty Test suite definition list"
+        ), "Suite definition validation unsuccessful - Reason: Empty Test suite definition list"
         for suite_json in downloaded_suite:
             test_runners = set()
             suite = Suite(**suite_json)
