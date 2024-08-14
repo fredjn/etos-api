@@ -310,6 +310,47 @@ class TestRouters(TestCase):
         self.assertDictEqual(iut, IUT_PROVIDER)
         self.assertDictEqual(execution_space, EXECUTION_SPACE_PROVIDER)
 
+    @patch("etos_api.library.validator.Docker.digest")
+    @patch("etos_api.library.validator.SuiteValidator._download_suite")
+    def test_start_etos_empty_suite(self, download_suite_mock, digest_mock):
+        """Test that POST requests to /etos with an empty suite definition list fails validation
+        and does not start ETOS tests.
+
+        Approval criteria:
+            - POST requests to ETOS with an empty suite definition list shall return 400.
+            - POST requests to ETOS with an empty suite definition list shall not trigger
+              sending a TERCC.
+
+        Test steps::
+            1. Send a POST request to etos with an empty suite definition list.
+            2. Verify that the status code is 400.
+            3. Verify that a TERCC was not sent.
+        """
+        digest_mock.return_value = (
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
+
+        download_suite_mock.return_value = []
+        self.logger.info("STEP: Send a POST request to etos.")
+        response = self.client.post(
+            "/etos",
+            json={
+                "artifact_identity": "pkg:testing/etos",
+                "test_suite_url": "http://localhost/my_test.json",
+            },
+        )
+        self.logger.info("STEP: Verify that the status code is 400.")
+        assert response.status_code == 400
+
+        self.logger.info("STEP: Verify that a TERCC was not sent.")
+        debug = Debug()
+        tercc = None
+        for event in debug.events_published:
+            if event.meta.type == "EiffelTestExecutionRecipeCollectionCreatedEvent":
+                tercc = event
+                break
+        assert tercc is None
+
     def test_selftest_get_ping(self):
         """Test that selftest ping with HTTP GET pings the system.
 
