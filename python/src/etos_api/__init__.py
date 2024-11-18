@@ -41,14 +41,18 @@ except PackageNotFoundError:
 
 DEV = os.getenv("DEV", "false").lower() == "true"
 ENVIRONMENT = "development" if DEV else "production"
-setup_logging("ETOS API", VERSION, ENVIRONMENT)
+OTEL_RESOURCE = Resource.create(
+    {SERVICE_NAME: "etos-api", SERVICE_VERSION: VERSION, SERVICE_NAMESPACE: ENVIRONMENT}
+)
+
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://host.k3d.internal:4317"
+os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = "http://host.k3d.internal:4317"
+os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+
+setup_logging("ETOS API", VERSION, ENVIRONMENT, OTEL_RESOURCE)
 
 if os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
-    PROVIDER = TracerProvider(
-        resource=Resource.create(
-            {SERVICE_NAME: "etos-api", SERVICE_VERSION: VERSION, SERVICE_NAMESPACE: ENVIRONMENT}
-        )
-    )
+    PROVIDER = TracerProvider(resource=OTEL_RESOURCE)
     EXPORTER = OTLPSpanExporter()
     PROCESSOR = BatchSpanProcessor(EXPORTER)
     PROVIDER.add_span_processor(PROCESSOR)
