@@ -27,6 +27,7 @@ import (
 	"github.com/eiffel-community/etos-api/internal/database/etcd"
 	"github.com/eiffel-community/etos-api/internal/executionspace/provider"
 	"github.com/eiffel-community/etos-api/internal/logging"
+	"github.com/eiffel-community/etos-api/internal/logging/otelhook"
 	"github.com/eiffel-community/etos-api/internal/logging/rabbitmqhook"
 	"github.com/eiffel-community/etos-api/internal/rabbitmq"
 	"github.com/eiffel-community/etos-api/internal/server"
@@ -35,6 +36,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/snowzach/rotatefilehook"
 	"go.elastic.co/ecslogrus"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 )
 
 // main sets up logging and starts up the webservice.
@@ -49,6 +52,17 @@ func main() {
 	}
 	if fileHook := fileLogging(cfg); fileHook != nil {
 		hooks = append(hooks, fileHook)
+	}
+
+	otelResource := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceName("Kubernetes Provider"),
+		semconv.ServiceVersion(vcsRevision()),
+		semconv.DeploymentEnvironmentName("Development"),
+	)
+
+	if otelHook := otelhook.NewOtelHook(ctx, otelResource); otelHook != nil {
+		hooks = append(hooks, otelHook)
 	}
 
 	logger, err := logging.Setup(cfg.LogLevel(), hooks)
