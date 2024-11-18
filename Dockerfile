@@ -8,6 +8,11 @@ FROM python:3.9-slim-bookworm
 ARG TZ
 ENV TZ=$TZ
 
+# TODO remove before PR
+ENV OTEL_EXPORTER_OTLP_ENDPOINT="http://ds-otel-collector-headless:4317"
+ENV OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://ds-otel-collector-headless:4317"
+ENV OTEL_EXPORTER_OTLP_INSECURE="true"
+
 COPY --from=build /src/python/dist/*.whl /tmp
 
 # hadolint ignore=DL3013

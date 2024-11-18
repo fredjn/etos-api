@@ -24,6 +24,11 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_NAMESPACE, SERVICE_VERSION, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import (
+    OTELResourceDetector,
+    ProcessResourceDetector,
+    get_aggregated_resources,
+)
 
 from etos_api.library.context_logging import ContextLogging
 
@@ -41,14 +46,18 @@ except PackageNotFoundError:
 
 DEV = os.getenv("DEV", "false").lower() == "true"
 ENVIRONMENT = "development" if DEV else "production"
-setup_logging("ETOS API", VERSION, ENVIRONMENT)
+OTEL_RESOURCE = Resource.create(
+    {SERVICE_NAME: "etos-api", SERVICE_VERSION: VERSION, SERVICE_NAMESPACE: ENVIRONMENT}
+)
+
+OTEL_RESOURCE = get_aggregated_resources(
+    [OTELResourceDetector(), ProcessResourceDetector()]
+).merge(OTEL_RESOURCE)
+
+setup_logging("ETOS API", VERSION, ENVIRONMENT, OTEL_RESOURCE)
 
 if os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
-    PROVIDER = TracerProvider(
-        resource=Resource.create(
-            {SERVICE_NAME: "etos-api", SERVICE_VERSION: VERSION, SERVICE_NAMESPACE: ENVIRONMENT}
-        )
-    )
+    PROVIDER = TracerProvider(resource=OTEL_RESOURCE)
     EXPORTER = OTLPSpanExporter()
     PROCESSOR = BatchSpanProcessor(EXPORTER)
     PROVIDER.add_span_processor(PROCESSOR)
