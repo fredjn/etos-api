@@ -40,9 +40,12 @@ coverage.xml
 
 # Build and docs folder/files
 build/*
+python/build/*
 bin/*
 dist/*
 sdist/*
+python/dist/*
+python/sdist/*
 docs/api/*
 docs/_rst/*
 docs/_build/*
