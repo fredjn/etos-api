@@ -21,6 +21,7 @@ import (
 
 	"github.com/eiffel-community/etos-api/internal/config"
 	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -66,6 +67,30 @@ func (k *Kubernetes) clientset() (*kubernetes.Clientset, error) {
 	return k.client, nil
 }
 
+// getJobsByIdentifier returns a list of jobs bound to the given testrun identifier.
+func (k *Kubernetes) getJobsByIdentifier(ctx context.Context, client *kubernetes.Clientset, identifier string) (*v1.JobList, error) {
+	// Try different labels for backward compatibility:
+	// - etos.eiffel-community.github.io/id is v1alpha+
+	// - id is v0 legacy
+	var jobs *v1.JobList
+	for _, label := range []string{"etos.eiffel-community.github.io/id", "id"} {
+		jobs, err := client.BatchV1().Jobs(k.namespace).List(
+			ctx,
+			metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("%s=%s", label, identifier),
+			},
+		)
+		if err != nil {
+			k.logger.Error(err)
+			return nil, err
+		}
+		if len(jobs.Items) > 0 {
+			return jobs, nil
+		}
+	}
+	return jobs, nil
+}
+
 // IsFinished checks if an ESR job is finished.
 func (k *Kubernetes) IsFinished(ctx context.Context, identifier string) bool {
 	client, err := k.clientset()
@@ -73,12 +98,7 @@ func (k *Kubernetes) IsFinished(ctx context.Context, identifier string) bool {
 		k.logger.Error(err)
 		return false
 	}
-	jobs, err := client.BatchV1().Jobs(k.namespace).List(
-		ctx,
-		metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("id=%s", identifier),
-		},
-	)
+	jobs, err := k.getJobsByIdentifier(ctx, client, identifier)
 	if err != nil {
 		k.logger.Error(err)
 		return false
@@ -101,13 +121,9 @@ func (k *Kubernetes) LogListenerIP(ctx context.Context, identifier string) (stri
 	if err != nil {
 		return "", err
 	}
-	jobs, err := client.BatchV1().Jobs(k.namespace).List(
-		ctx,
-		metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("id=%s", identifier),
-		},
-	)
+	jobs, err := k.getJobsByIdentifier(ctx, client, identifier)
 	if err != nil {
+		k.logger.Error(err)
 		return "", err
 	}
 	if len(jobs.Items) == 0 {
