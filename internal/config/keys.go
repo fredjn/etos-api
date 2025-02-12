@@ -20,28 +20,33 @@ import (
 	"os"
 )
 
-type SSEConfig interface {
+type KeyConfig interface {
 	Config
-	RabbitMQURI() string
+	PrivateKey() ([]byte, error)
 }
 
-type sseCfg struct {
+// keyCfg implements the KeyConfig interface.
+type keyCfg struct {
 	Config
-	rabbitmqURI string
+	privateKeyPath string
 }
 
-// NewSSEConfig creates a sse config interface based on input parameters or environment variables.
-func NewSSEConfig() SSEConfig {
-	var conf sseCfg
+// NewKeyConcifg creates a key config interface based on input parameters or environment variables.
+func NewKeyConfig() KeyConfig {
+	var conf keyCfg
 
-	flag.StringVar(&conf.rabbitmqURI, "rabbitmquri", os.Getenv("ETOS_RABBITMQ_URI"), "URI to the RabbitMQ ")
+	flag.StringVar(&conf.privateKeyPath, "privatekeypath", os.Getenv("PRIVATE_KEY_PATH"), "Path to a private key to use for signing JWTs.")
 	base := load()
-	conf.Config = base
 	flag.Parse()
+	conf.Config = base
+
 	return &conf
 }
 
-// RabbitMQURI returns the RabbitMQ URI.
-func (c *sseCfg) RabbitMQURI() string {
-	return c.rabbitmqURI
+// PrivateKey reads a private key from disk and returns the content.
+func (c *keyCfg) PrivateKey() ([]byte, error) {
+	if c.privateKeyPath == "" {
+		return nil, nil
+	}
+	return os.ReadFile(c.privateKeyPath)
 }

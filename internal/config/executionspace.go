@@ -36,7 +36,6 @@ type ExecutionSpaceConfig interface {
 // executionSpaceCfg implements the ExecutionSpaceConfig interface.
 type executionSpaceCfg struct {
 	Config
-	stripPrefix               string
 	hostname                  string
 	timeout                   time.Duration
 	executionSpaceWaitTimeout time.Duration

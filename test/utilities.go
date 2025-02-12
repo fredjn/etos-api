@@ -13,35 +13,38 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package config
+package test
 
 import (
-	"flag"
-	"os"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 )
 
-type SSEConfig interface {
-	Config
-	RabbitMQURI() string
-}
-
-type sseCfg struct {
-	Config
-	rabbitmqURI string
-}
-
-// NewSSEConfig creates a sse config interface based on input parameters or environment variables.
-func NewSSEConfig() SSEConfig {
-	var conf sseCfg
-
-	flag.StringVar(&conf.rabbitmqURI, "rabbitmquri", os.Getenv("ETOS_RABBITMQ_URI"), "URI to the RabbitMQ ")
-	base := load()
-	conf.Config = base
-	flag.Parse()
-	return &conf
-}
-
-// RabbitMQURI returns the RabbitMQ URI.
-func (c *sseCfg) RabbitMQURI() string {
-	return c.rabbitmqURI
+// NewKeys creates a new public and private key for testing.
+func NewKeys() ([]byte, []byte, error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	b, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return nil, nil, err
+	}
+	block := &pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: b,
+	}
+	privateKey := pem.EncodeToMemory(block)
+	b, err = x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return nil, nil, err
+	}
+	block = &pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: b,
+	}
+	publicKey := pem.EncodeToMemory(block)
+	return privateKey, publicKey, nil
 }

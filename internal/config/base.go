@@ -30,6 +30,7 @@ type Config interface {
 	LogFilePath() string
 	ETOSNamespace() string
 	DatabaseURI() string
+	PublicKey() ([]byte, error)
 }
 
 // baseCfg implements the Config interface.
@@ -42,6 +43,7 @@ type baseCfg struct {
 	etosNamespace string
 	databaseHost  string
 	databasePort  string
+	publicKeyPath string
 }
 
 // load the command line vars for a base configuration.
@@ -56,6 +58,7 @@ func load() Config {
 	flag.StringVar(&conf.etosNamespace, "etosnamespace", ReadNamespaceOrEnv("ETOS_NAMESPACE"), "Path, including filename, for the log files to create.")
 	flag.StringVar(&conf.databaseHost, "databasehost", EnvOrDefault("ETOS_ETCD_HOST", "etcd-client"), "Host to the database.")
 	flag.StringVar(&conf.databasePort, "databaseport", EnvOrDefault("ETOS_ETCD_PORT", "2379"), "Port to the database.")
+	flag.StringVar(&conf.publicKeyPath, "publickeypath", os.Getenv("PUBLIC_KEY_PATH"), "Path to a public key to use for verifying JWTs.")
 	return &conf
 }
 
@@ -92,6 +95,14 @@ func (c *baseCfg) ETOSNamespace() string {
 // DatabaseURI returns the URI to the ETOS database.
 func (c *baseCfg) DatabaseURI() string {
 	return fmt.Sprintf("%s:%s", c.databaseHost, c.databasePort)
+}
+
+// PublicKey reads a public key from disk and returns the content.
+func (c *baseCfg) PublicKey() ([]byte, error) {
+	if c.publicKeyPath == "" {
+		return nil, nil
+	}
+	return os.ReadFile(c.publicKeyPath)
 }
 
 // EnvOrDefault will look up key in environment variables and return if it exists, else return the fallback value.

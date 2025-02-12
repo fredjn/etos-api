@@ -13,35 +13,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package config
+package stream
 
 import (
-	"flag"
-	"os"
+	"context"
+
+	"github.com/sirupsen/logrus"
 )
 
-type SSEConfig interface {
-	Config
-	RabbitMQURI() string
+type Streamer interface {
+	NewStream(context.Context, *logrus.Entry, string) (Stream, error)
+	CreateStream(context.Context, *logrus.Entry, string) error
+	Close()
 }
 
-type sseCfg struct {
-	Config
-	rabbitmqURI string
-}
-
-// NewSSEConfig creates a sse config interface based on input parameters or environment variables.
-func NewSSEConfig() SSEConfig {
-	var conf sseCfg
-
-	flag.StringVar(&conf.rabbitmqURI, "rabbitmquri", os.Getenv("ETOS_RABBITMQ_URI"), "URI to the RabbitMQ ")
-	base := load()
-	conf.Config = base
-	flag.Parse()
-	return &conf
-}
-
-// RabbitMQURI returns the RabbitMQ URI.
-func (c *sseCfg) RabbitMQURI() string {
-	return c.rabbitmqURI
+type Stream interface {
+	WithChannel(chan<- []byte) Stream
+	WithOffset(int) Stream
+	WithFilter([]string) Stream
+	Consume(context.Context) (<-chan error, error)
+	Close()
 }
