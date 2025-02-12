@@ -20,7 +20,7 @@ spec:
       serviceAccountName: etos-logarea
       containers:
         - name: etos-logarea
-          image: ghcr.io/eiffel-community/etos-logarea:42af85d2
+          image: ghcr.io/eiffel-community/etos-logarea:334f0bad
           imagePullPolicy: IfNotPresent
           env:
             - name: SERVICE_HOST
