@@ -34,3 +34,6 @@ spec:
             httpGet:
               path: /api/ping
               port: http
+          envFrom:
+            - configMapRef:
+              name: etos-api
