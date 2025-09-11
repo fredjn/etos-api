@@ -67,6 +67,13 @@ func New(cfg config.SSEConfig, log *logrus.Entry, ctx context.Context) applicati
 func (a SSEApplication) LoadRoutes(router *httprouter.Router) {
 	kube := kubernetes.New(a.cfg, a.logger)
 	handler := &SSEHandler{a.logger, a.cfg, a.ctx, kube}
+	
+	// Ensure we clean up the kubernetes watcher when the application shuts down
+	go func() {
+		<-a.ctx.Done()
+		kube.Close()
+	}()
+	
 	router.GET("/sse/v1/selftest/ping", handler.Selftest)
 	router.GET("/sse/v1/events/:identifier", handler.GetEvents)
 	router.GET("/sse/v1/event/:identifier/:id", handler.GetEvent)
@@ -84,33 +91,48 @@ func (h SSEHandler) Selftest(w http.ResponseWriter, r *http.Request, _ httproute
 func (h SSEHandler) Subscribe(ch chan<- events.Event, logger *logrus.Entry, ctx context.Context, counter int, identifier string, url string) {
 	defer close(ch)
 
-	// TODO: Test a streaming approach.
+	// Subscribe to job status changes
+	jobStatusCh, unsubscribe, err := h.kube.SubscribeToJobStatus(identifier)
+	if err != nil {
+		logger.Errorf("Failed to subscribe to job status: %v", err)
+		return
+	}
+	defer unsubscribe()
+
+	// Set up tickers for log polling and ping
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
+
+	finished := false
 
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("Client lost, closing subscriber")
 			return
+			
+		case jobStatus := <-jobStatusCh:
+			// React to job status changes
+			if jobStatus.Finished && !finished {
+				finished = true
+				logger.Info("ESR finished, shutting down")
+				ch <- events.Event{Event: "shutdown", Data: "ESR finished, shutting down"}
+				// Continue to allow final log polling
+			}
+			
 		case <-ping.C:
 			ch <- events.Event{Event: "ping"}
+			
 		case <-tick.C:
 			newEvents, err := GetFrom(ctx, url, fmt.Sprint(counter))
 			if err != nil {
-				// The context sent to IsFinished may be canceled due to client-side
-				// throttling by Kubernetes. We don't want IsFinished to cancel the
-				// the request context from our clients, causing a ConnectionReset,
-				// so we create a new context here.
-				if h.kube.IsFinished(context.Background(), identifier) {
-					logger.Info("ESR finished, shutting down")
-					// If the shutdown event is not sent to the client, then the client will
-					// reconnect and the message will be received next time.
+				// If we haven't detected finished via watch, check directly as fallback
+				if !finished && h.kube.IsFinished(context.Background(), identifier) {
+					finished = true
+					logger.Info("ESR finished (fallback detection), shutting down")
 					ch <- events.Event{Event: "shutdown", Data: "ESR finished, shutting down"}
-					// We expect the client to close the connection, as such we continue here
-					// instead of ending the subscriber.
 					continue
 				}
 				logger.Warning(err.Error())

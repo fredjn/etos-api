@@ -18,6 +18,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/eiffel-community/etos-api/internal/config"
 	"github.com/sirupsen/logrus"
@@ -32,6 +33,8 @@ type Kubernetes struct {
 	config    *rest.Config
 	client    *kubernetes.Clientset
 	namespace string
+	watcher   *JobWatcher
+	watcherMu sync.Mutex
 }
 
 // New creates a new Kubernetes struct.
@@ -67,6 +70,39 @@ func (k *Kubernetes) clientset() (*kubernetes.Clientset, error) {
 	return k.client, nil
 }
 
+// ensureWatcher ensures the job watcher is running
+func (k *Kubernetes) ensureWatcher() (*JobWatcher, error) {
+	k.watcherMu.Lock()
+	defer k.watcherMu.Unlock()
+	
+	if k.watcher != nil {
+		return k.watcher, nil
+	}
+	
+	client, err := k.clientset()
+	if err != nil {
+		return nil, err
+	}
+	
+	k.watcher = NewJobWatcher(client, k.namespace, k.logger)
+	if err := k.watcher.Start(); err != nil {
+		return nil, err
+	}
+	
+	return k.watcher, nil
+}
+
+// Close stops the job watcher and cleans up resources
+func (k *Kubernetes) Close() {
+	k.watcherMu.Lock()
+	defer k.watcherMu.Unlock()
+	
+	if k.watcher != nil {
+		k.watcher.Stop()
+		k.watcher = nil
+	}
+}
+
 // getJobsByIdentifier returns a list of jobs bound to the given testrun identifier.
 func (k *Kubernetes) getJobsByIdentifier(ctx context.Context, client *kubernetes.Clientset, identifier string) (*v1.JobList, error) {
 	// Try different labels for backward compatibility:
@@ -90,8 +126,20 @@ func (k *Kubernetes) getJobsByIdentifier(ctx context.Context, client *kubernetes
 	return &v1.JobList{}, nil
 }
 
-// IsFinished checks if an ESR job is finished.
+// IsFinished checks if an ESR job is finished using the watch-based approach.
 func (k *Kubernetes) IsFinished(ctx context.Context, identifier string) bool {
+	watcher, err := k.ensureWatcher()
+	if err != nil {
+		k.logger.Error(err)
+		// Fallback to direct API call
+		return k.isFinishedDirect(ctx, identifier)
+	}
+	
+	return watcher.IsJobFinished(identifier)
+}
+
+// isFinishedDirect provides fallback direct API access (original implementation)
+func (k *Kubernetes) isFinishedDirect(ctx context.Context, identifier string) bool {
 	client, err := k.clientset()
 	if err != nil {
 		k.logger.Error(err)
@@ -112,6 +160,17 @@ func (k *Kubernetes) IsFinished(ctx context.Context, identifier string) bool {
 		return false
 	}
 	return true
+}
+
+// SubscribeToJobStatus subscribes to job status changes for real-time updates
+func (k *Kubernetes) SubscribeToJobStatus(identifier string) (<-chan JobStatus, func(), error) {
+	watcher, err := k.ensureWatcher()
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	ch, unsubscribe := watcher.SubscribeToJob(identifier)
+	return ch, unsubscribe, nil
 }
 
 // LogListenerIP gets the IP address of an ESR log listener.
